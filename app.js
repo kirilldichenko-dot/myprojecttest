@@ -19,6 +19,7 @@ const btnRoll = document.getElementById("btn-roll");
 const btnFlip = document.getElementById("btn-flip");
 const btnCalc = document.getElementById("btn-calc");
 const btnTime = document.getElementById("btn-time");
+const btnYoutube = document.getElementById("btn-youtube");
 const calcInput = document.getElementById("calc-input");
 const btnCalcEval = document.getElementById("btn-calc-eval");
 
@@ -123,6 +124,11 @@ btnCalcEval.addEventListener("click", () => {
   } catch (e) {
     setResult("⚠️ Invalid expression. Use basic numbers and operators.");
   }
+});
+
+btnYoutube.addEventListener("click", () => {
+  // Открываем YouTube в браузере Telegram / системном браузере
+  window.open("https://www.youtube.com", "_blank", "noopener,noreferrer");
 });
 
 // ---------------------------------------------------------------------------

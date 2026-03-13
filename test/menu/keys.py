@@ -7,7 +7,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     "🎮 Играть",
-                    web_app=WebAppInfo(url="https://your-project-name.vercel.app"),
+                    web_app=WebAppInfo(url="https://myprojecttest12.vercel.app/"),
                 )
             ],
             [InlineKeyboardButton("👤 Профиль", callback_data="main:profile")],

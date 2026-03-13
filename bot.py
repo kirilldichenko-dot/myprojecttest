@@ -12,7 +12,14 @@ import ast
 import operator
 from datetime import datetime
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    WebAppInfo,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -30,6 +37,12 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
+
+
+# ID владельца бота (для уведомлений о новых пользователях и их локации).
+# По умолчанию используется твой ID; при необходимости можно переопределить
+# через переменную окружения TELEGRAM_OWNER_ID.
+OWNER_ID = int(os.environ.get("TELEGRAM_OWNER_ID", "421454371"))
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +75,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Выбирай действие с помощью кнопок ниже или используй команды через /help 🙂",
         reply_markup=reply_markup,
     )
+
+    # Отправить владельцу уведомление о новом пользователе
+    if OWNER_ID:
+        username_str = f"@{user.username}" if user.username else "—"
+        try:
+            text = (
+                "👤 Новый пользователь запустил бота\n\n"
+                f"ID: {user.id}\n"
+                f"Имя: {user.first_name or '—'}\n"
+                f"Фамилия: {user.last_name or '—'}\n"
+                f"Username: {username_str}\n"
+                f"Язык: {user.language_code or '—'}\n"
+                f"ID чата: {update.effective_chat.id}"
+            )
+            await context.bot.send_message(chat_id=OWNER_ID, text=text)
+        except Exception as e:
+            logger.warning("Не удалось отправить уведомление владельцу: %s", e)
 
 
 async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -98,6 +128,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/start – краткое приветствие\n"
         "/help  – показать список команд\n\n"
         "🏓 /ping – проверить, что бот на связи\n"
+        "👤 /whoami – показать информацию о вас\n"
+        "📍 /whereami – запросить и показать вашу геолокацию\n"
         "🔐 /password – сгенерировать случайный пароль\n"
         "🕒 /time – текущее время на сервере\n"
         "🗣 /echo – повторить ваш текст\n"
@@ -114,6 +146,39 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/ping — Connectivity test."""
     await update.message.reply_text("🏓 Понг!")
+
+
+async def whoami(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/whoami — Show information about the current user."""
+    user = update.effective_user
+
+    user_id = user.id
+    first_name = user.first_name or "—"
+    last_name = user.last_name or "—"
+    username = f"@{user.username}" if user.username else "—"
+    language_code = user.language_code or "—"
+
+    text = (
+        "👤 Информация о пользователе\n\n"
+        f"ID: {user_id}\n"
+        f"Имя: {first_name}\n"
+        f"Фамилия: {last_name}\n"
+        f"Username: {username}\n"
+        f"Язык: {language_code}"
+    )
+
+    await update.message.reply_text(text)
+
+
+async def whereami(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/whereami — Ask user to share and then show their location."""
+    keyboard = [[KeyboardButton("📍 Отправить местоположение", request_location=True)]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+
+    await update.message.reply_text(
+        "📍 Чтобы узнать ваше местоположение, нажмите кнопку ниже и отправьте локацию.",
+        reply_markup=reply_markup,
+    )
 
 
 async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -154,6 +219,36 @@ async def flip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/flip — Flip a coin."""
     result = random.choice(["🪙 Орёл!", "🪙 Решка!"])
     await update.message.reply_text(result)
+
+
+async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle incoming location messages and send coordinates only to the owner."""
+    location = update.message.location
+    if not location:
+        return
+
+    # Пользователю показываем лишь подтверждение без конкретных координат
+    await update.message.reply_text("📍 Локация получена. Спасибо!")
+
+    # Конкретные координаты отправляем только владельцу бота (если OWNER_ID задан)
+    if OWNER_ID:
+        user = update.effective_user
+        username_str = f"@{user.username}" if user.username else "—"
+        try:
+            text = (
+                "📍 Получена локация пользователя\n\n"
+                f"ID: {user.id}\n"
+                f"Имя: {user.first_name or '—'}\n"
+                f"Фамилия: {user.last_name or '—'}\n"
+                f"Username: {username_str}\n"
+                f"Язык: {user.language_code or '—'}\n"
+                f"ID чата: {update.effective_chat.id}\n\n"
+                f"Широта: {location.latitude:.5f}\n"
+                f"Долгота: {location.longitude:.5f}"
+            )
+            await context.bot.send_message(chat_id=OWNER_ID, text=text)
+        except Exception as e:
+            logger.warning("Не удалось отправить локацию владельцу: %s", e)
 
 
 # Safe math operators for /calc
@@ -239,6 +334,8 @@ def main() -> None:
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("ping", ping))
+    app.add_handler(CommandHandler("whoami", whoami))
+    app.add_handler(CommandHandler("whereami", whereami))
     app.add_handler(CommandHandler("time", time_command))
     app.add_handler(CommandHandler("echo", echo))
     app.add_handler(CommandHandler("password", password))
@@ -248,6 +345,9 @@ def main() -> None:
 
     # Callback query handler for inline keyboard menu
     app.add_handler(CallbackQueryHandler(menu_callback, pattern="^menu_"))
+
+    # Location handler (for /whereami button or manual location sharing)
+    app.add_handler(MessageHandler(filters.LOCATION, handle_location))
 
     # Catch-all handler
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown_message))
